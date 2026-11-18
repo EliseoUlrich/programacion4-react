@@ -1,0 +1,117 @@
+RESPUESTAS PARA EL CUESTIONARIO - Práctica de endpoints
+(consignas "para pensar"; NO va dentro del repositorio)
+
+=====================================================================
+PREGUNTA 1 - Link del repositorio
+=====================================================================
+https://github.com/EliseoUlrich/programacion4-react
+
+
+=====================================================================
+PRÁCTICA 1 - ¿Por qué la lista no trae todos los datos?
+=====================================================================
+En Network, GET /user devuelve de cada usuario solo id y name, mientras que
+GET /user/{id} devuelve todos los datos de uno solo (email, edad, país y roles).
+
+La API no manda todo en la lista porque la mayoría de esos datos nunca se
+miran: el usuario solo abre el detalle de uno o dos. Con 10.000 usuarios la
+respuesta sería enorme (más datos viajando por la red, más lenta de
+descargar y de mostrar, más consultas a la base para traer países y roles
+de todos) y casi todo se desperdiciaría. Es más eficiente mandar una lista
+liviana y pedir el detalle solo del usuario que se elige, aunque eso
+signifique hacer un segundo pedido.
+
+
+=====================================================================
+PRÁCTICA 2 - Cargando y errores
+=====================================================================
+Cambiando la URL por /usr la API responde 404 y se muestra "Not Found"
+(el detail) en lugar de la lista. Con la velocidad en Slow 4G se ve el
+"Cargando..." mientras llega la respuesta.
+
+
+=====================================================================
+PRÁCTICA 3 - Buscar "#" con y sin encodeURIComponent
+=====================================================================
+Sin encodeURIComponent la URL que sale es /user/search/# y el navegador toma
+el # como el comienzo de un fragmento (ancla), que nunca se envía al
+servidor. El pedido real que aparece en Network es /user/search/ (sin el
+texto buscado), el backend lo redirige a /user/search, que coincide con la
+ruta /user/{user_id}, y responde 422 porque "search" no es un número.
+
+Con encodeURIComponent el # se convierte en %23, la URL queda
+/user/search/%23 y el backend recibe el texto "#" correctamente (responde
+200 con una lista vacía porque ningún nombre tiene #).
+Lo mismo pasa con otros caracteres especiales como ?, / o espacios.
+
+
+=====================================================================
+PRÁCTICA 5 - Alta con sfer
+=====================================================================
+Logueado como sfer (rol REGULAR, solo tiene read_users) la API responde
+403 Forbidden con el detail "Missing permission: write_users", y la app
+muestra ese mensaje.
+
+
+=====================================================================
+PRÁCTICA 6 - Solo mayores
+=====================================================================
+Al crear un usuario de 16 años aparece en "Todos" (GET /user) pero no en
+"Solo mayores" (GET /user_mayores), porque ese endpoint filtra age >= 18.
+
+
+=====================================================================
+PRÁCTICA 7 - Borrar con sfer / ¿está bien que el botón aparezca igual?
+=====================================================================
+Con sfer la API responde 403 "Missing permission: delete_users" y se
+muestra el mensaje.
+
+No está bien que el botón aparezca igual: se le ofrece al usuario una
+acción que siempre va a fallar, lo cual es confuso y mala experiencia. La
+interfaz debería mostrar solo lo que el usuario puede hacer según sus
+roles/permisos (ocultar o deshabilitar "Borrar" si no tiene delete_users).
+Igual, la seguridad real la tiene que garantizar el backend (como lo hace
+con el 403): ocultar el botón es solo para la experiencia de uso.
+
+
+=====================================================================
+PRÁCTICA 8 - Sesión vencida
+=====================================================================
+Cambiando una letra del token en Application -> Local Storage y
+recargando, el primer pedido responde 401, se borra el token y se vuelve
+al login con el mensaje "Tu sesión venció". App le pasa a UserList (y
+UserList a UserDetail) la función onUnauthorized como prop, y el
+componente que hace el fetch la llama cuando recibe un 401.
+
+
+=====================================================================
+PRÁCTICA 9 - Para pensar antes del paso 8
+=====================================================================
+Contando en el código de practica8 (App.tsx, UserList.tsx y UserDetail.tsx):
+
+- import.meta.env.VITE_API_URL: 12 veces (login, /user/me/id, /user/{id}
+  del saludo, /user varias veces, /user/search, /user_mayores, POST /user,
+  DELETE /user/{id} y /user/{id} del detalle).
+- Authorization: `Bearer ${token}`: 7 veces (en todos los pedidos menos
+  el login).
+- if (!response.ok) / if (!respuesta.ok): 8 veces (después de cada fetch).
+- useState para loading y error: loading 1 vez y error 3 veces (App,
+  UserList y UserDetail), y en cada componente nuevo que pida datos habría
+  que volver a declararlos.
+- Además, el chequeo del 401 (status === 401 -> onUnauthorized) está
+  repetido en 7 lugares.
+
+Si el backend cambia y el token hay que mandarlo en otro header, habría que
+tocar todos los archivos que hacen fetch (UserList y UserDetail, y cualquier
+componente que se agregue), cambiando cada pedido uno por uno: 7 lugares.
+
+Si nos olvidamos de uno, ese pedido empieza a responder 401: con la
+práctica 8 eso además cierra la sesión del usuario sin motivo aparente, y
+el error aparece solo en esa pantalla o acción, por lo que es difícil de
+detectar y de encontrar.
+
+La solución es no repetir: centralizar los pedidos en una única función
+(por ejemplo apiFetch(path, options)) que arme la URL con VITE_API_URL,
+agregue el header de autorización, revise response.ok y maneje el 401 en un
+solo lugar. Así cualquier cambio del backend se hace una sola vez.
+
